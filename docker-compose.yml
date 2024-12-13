@@ -1,0 +1,67 @@
+version: '3.8'
+   
+services:
+
+  frontend:
+    labels:
+      shipyard.route: '/'
+    build: 'frontend'
+    environment:
+      CI: 'true'
+      DANGEROUSLY_DISABLE_HOST_CHECK: 'true'
+    env_file:
+      - frontend/frontend.env
+    volumes:
+      - './frontend/src:/app/src'
+      - './frontend/public:/app/public'
+    ports:
+      - '3000:3000'
+
+  backend:
+    labels:
+      shipyard.init: 'poetry run python src/manage.py migrate'
+      shipyard.route: '/api'
+    build: 'backend'
+    volumes:
+      - './backend/src:/srv/src/'
+      - './backend/poetry.lock:/srv/poetry.lock/'
+      - './backend/pyproject.toml:/srv/pyproject.toml/'
+    environment:
+      LOCALSTACK_HOST: 'localstack'
+    command: ["poetry", "run", "python", "src/manage.py", "runserver", "0:8080"]
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres
+
+  postgres:
+    image: 'postgres:9.6.20-alpine'
+    restart: always
+    volumes:
+      - 'postgres:/var/lib/postgresql/data'
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_USER=obscure-user
+      - POSTGRES_PASSWORD=obscure-password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - '5432'
+
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:latest
+    ports:
+      - '127.0.0.1:4566:4566'            # LocalStack Gateway
+      - '127.0.0.1:4510-4559:4510-4559'  # external services port range
+    environment:
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - EXTRA_CORS_ALLOWED_ORIGINS='*'
+    volumes:
+      - './init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh'
+      - 'localstack:/var/lib/localstack'
+      - '/var/run/docker.sock:/var/run/docker.sock'
+
+volumes:
+  postgres:
+  localstack:
